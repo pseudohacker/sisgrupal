@@ -1,0 +1,41 @@
+$dnis = Get-Content c:\sisgrupal\prueba.txt | Where {$_ -notmatch '^\s+$'} 
+$web = New-Object Net.WebClient
+$a = @()
+$final = @()
+
+foreach ($dni in $dnis) {
+$temp = $web.DownloadString("http://app.sis.gob.pe/SisConsultaEnLinea/Consulta/frmResultadoEnLinea.aspx?Tipo=2&DNI=" + $dni +"&TipoDoc=1")
+$estado = $temp.Contains("Estado")
+$work = new-object PSObject
+
+If ($estado -eq 1)
+{
+$regextract=[regex]::Matches($temp, 'Reg=(.+)&id') | % {$_.Captures[0].Groups[0].value}
+select -expa value
+$regtemp = $regextract[0].TrimEnd("&id")
+$regtemp = $regtemp.TrimStart("Reg=")
+$temp = $web.DownloadString("http://app.sis.gob.pe/SisConsultaEnLinea/Consulta/frmImpAfiliacionEnLinea2.aspx?NumReg=" + $regtemp + "&idper=0&docident=" + $dni)
+$a=[regex]::Matches($temp, '<td.*?>(.+)</td>') | % {$_.Captures[0].Groups[1].value}
+$work | add-member -membertype NoteProperty -name "Nombres y Apellidos" -Value $a[4]
+$work | add-member -membertype NoteProperty -name "Fecha de Nacimiento" -Value $a[6]
+$work | add-member -membertype NoteProperty -name "Documento de Identidad" -Value $a[8]
+$work | add-member -membertype NoteProperty -name "Tipo de seguro" -Value $a[10]
+$work | add-member -membertype NoteProperty -name "Fecha de Afiliación" -Value $a[17]
+$work | add-member -membertype NoteProperty -name "Establecimiento" -Value $a[18].Substring(0,10)
+$work | add-member -membertype NoteProperty -name "Estado" -Value $a[20]
+$final += $work
+}
+
+If ($estado -eq 0)
+{
+$work | add-member -membertype NoteProperty -name "Nombres y Apellidos" -Value 0
+$work | add-member -membertype NoteProperty -name "Fecha de Nacimiento" -Value 0
+$work | add-member -membertype NoteProperty -name "Documento de Identidad" -Value $dni
+$work | add-member -membertype NoteProperty -name "Tipo de seguro" -Value 0
+$work | add-member -membertype NoteProperty -name "Fecha de Afiliación" -Value 0
+$work | add-member -membertype NoteProperty -name "Establecimiento" -Value 0
+$work | add-member -membertype NoteProperty -name "Estado" -Value "No SIS"
+$final += $work
+}
+}
+$final | export-csv final.csv -NoTypeInformation
