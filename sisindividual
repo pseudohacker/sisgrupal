@@ -1,0 +1,68 @@
+<#
+The MIT License (MIT)
+ 
+Copyright (c) 2014 Javier Loza
+ 
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+ 
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+ 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+#>
+ 
+Param(
+   [string]$dni
+) #end param
+ 
+$web = New-Object Net.WebClient
+$a = @()
+$final = @()
+ 
+$temp = $web.DownloadString("http://app.sis.gob.pe/SisConsultaEnLinea/Consulta/frmResultadoEnLinea.aspx?Tipo=2&DNI=" + $dni +"&TipoDoc=1")
+$estado = $temp.Contains("Estado")
+$work = new-object PSObject
+ 
+If ($estado -eq 1)
+{
+$regextract=[regex]::Matches($temp, 'Reg=(.+)&id') | % {$_.Captures[0].Groups[0].value}
+select -expa value
+$regtemp = $regextract[0].TrimEnd("&id")
+$regtemp = $regtemp.TrimStart("Reg=")
+$temp = $web.DownloadString("http://app.sis.gob.pe/SisConsultaEnLinea/Consulta/frmImpAfiliacionEnLinea2.aspx?NumReg=" + $regtemp + "&idper=0&docident=" + $dni)
+$a=[regex]::Matches($temp, '<td.*?>(.+)</td>') | % {$_.Captures[0].Groups[1].value}
+$work | add-member -membertype NoteProperty -name "Nombres y Apellidos" -Value $a[4]
+$work | add-member -membertype NoteProperty -name "Fecha de Nacimiento" -Value $a[6]
+$work | add-member -membertype NoteProperty -name "Documento de Identidad" -Value $a[8]
+$work | add-member -membertype NoteProperty -name "Tipo de seguro" -Value $a[10]
+$work | add-member -membertype NoteProperty -name "Fecha de Afiliación" -Value $a[17]
+$work | add-member -membertype NoteProperty -name "Establecimiento" -Value $a[18].Substring(0,25)
+$work | add-member -membertype NoteProperty -name "Estado" -Value $a[20]
+$final += $work
+}
+ 
+If ($estado -eq 0)
+{
+$work | add-member -membertype NoteProperty -name "Nombres y Apellidos" -Value 0
+$work | add-member -membertype NoteProperty -name "Fecha de Nacimiento" -Value 0
+$work | add-member -membertype NoteProperty -name "Documento de Identidad" -Value $dni
+$work | add-member -membertype NoteProperty -name "Tipo de seguro" -Value 0
+$work | add-member -membertype NoteProperty -name "Fecha de Afiliación" -Value 0
+$work | add-member -membertype NoteProperty -name "Establecimiento" -Value 0
+$work | add-member -membertype NoteProperty -name "Estado" -Value "No SIS"
+$final += $work
+}
+
+$final | export-csv c:\sisgrupal\finalind.csv -NoTypeInformation
+
